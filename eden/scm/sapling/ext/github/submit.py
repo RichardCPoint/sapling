@@ -5,6 +5,7 @@
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, List, Optional, Tuple
@@ -290,6 +291,13 @@ async def rewrite_pull_request_body(
     else:
         ui.status_err(_("updated body for %s\n") % pr.url)
 
+def get_pr_branch_name(ui, commit_data: CommitData, pr_number: int):
+    body = commit_data.get_msg()
+    title = firstline(body)
+    simplified_title = re.sub(r"\W+$", "", re.sub(r"\W+", "-", title))
+    branch_name_template = ui.config("github", "pr-branch.name", "pr{number}")
+    branch_name = branch_name_template.format(number=pr_number, title=simplified_title)
+    return branch_name
 
 @dataclass
 class SerialStrategyParams:
@@ -299,7 +307,6 @@ class SerialStrategyParams:
     # The str in the Tuple is the head branch name for the commit.
     pull_requests_to_create: List[Tuple[CommitData, str]]
     repository: Optional[Repository]
-
 
 async def create_serial_strategy_params(
     ui,
@@ -352,7 +359,8 @@ async def create_serial_strategy_params(
             else:
                 next_pull_request_number += 1
             # Consider including username in branch_name?
-            branch_name = f"pr{next_pull_request_number}"
+            branch_name = get_pr_branch_name(ui=ui, commit_data=top, pr_number=next_pull_request_number)
+
             refs_to_update.append(f"{hex(top.node)}:refs/heads/{branch_name}")
             top.head_branch_name = branch_name
             pull_requests_to_create.append((top, branch_name))
@@ -487,8 +495,8 @@ async def create_placeholder_strategy_params(
             commits_that_need_pull_requests, issue_numbers
         ):
             # Consider including username in branch_name?
-            branch_name = f"pr{number}"
             commit = commit_needs_pr.commit
+            branch_name = get_pr_branch_name(ui=ui, commit_data=commit, pr_number=number)
             commit.head_branch_name = branch_name
             refs_to_update.append(f"{hex(commit.node)}:refs/heads/{branch_name}")
             params = PullRequestParams(
