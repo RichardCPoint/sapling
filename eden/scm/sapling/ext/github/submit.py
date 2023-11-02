@@ -219,7 +219,7 @@ async def update_commits_in_stack(
     # Now that each pull request has a named branch pushed to GitHub, we can
     # create/update the pull request title and body, as appropriate.
     pr_numbers_and_num_commits = [
-        (none_throws(p[0].pr).number, len(p)) for p in partitions
+        (none_throws(p[0].pr), len(p)) for p in partitions
     ]
 
     # Add the head of the stack to the sapling-pr-archive branch.
@@ -249,7 +249,7 @@ async def rewrite_pull_request_body(
     partitions: List[List[CommitData]],
     index: int,
     workflow: SubmitWorkflow,
-    pr_numbers_and_num_commits: List[Tuple[int, int]],
+    pr_numbers_and_num_commits: List[Tuple[PullRequestDetails, int]],
     repository: Repository,
     ui,
 ) -> None:

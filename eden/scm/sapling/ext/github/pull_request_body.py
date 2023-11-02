@@ -6,14 +6,14 @@
 import re
 from typing import List, Tuple
 
-from .gh_submit import Repository
+from .gh_submit import PullRequestDetails, Repository
 
 _HORIZONTAL_RULE = "---"
 
 
 def create_pull_request_title_and_body(
     commit_msg: str,
-    pr_numbers_and_num_commits: List[Tuple[int, int]],
+    pr_numbers_and_num_commits: List[Tuple[PullRequestDetails, int]],
     pr_numbers_index: int,
     repository: Repository,
     reviewstack: bool = True,
@@ -62,26 +62,31 @@ def create_pull_request_title_and_body(
     Foo
     """
     owner, name = repository.get_upstream_owner_and_name()
-    pr = pr_numbers_and_num_commits[pr_numbers_index][0]
+    top_pr = pr_numbers_and_num_commits[pr_numbers_index][0]
     title = firstline(commit_msg)
     body = commit_msg
     extra = []
     if len(pr_numbers_and_num_commits) > 1:
-        if reviewstack:
-            reviewstack_url = f"https://reviewstack.dev/{owner}/{name}/pull/{pr}"
-            review_stack_message = f"Stack created with [Sapling](https://sapling-scm.com). Best reviewed with [ReviewStack]({reviewstack_url})."
-            extra.append(review_stack_message)
+        extra.append("### PR Stack")
         bulleted_list = "\n".join(
-            _format_stack_entry(pr_number, index, pr_numbers_index, num_commits)
-            for index, (pr_number, num_commits) in enumerate(pr_numbers_and_num_commits)
-        )
+            _format_stack_entry(pr, index, pr_numbers_index, num_commits)
+            for index, (pr, num_commits) in enumerate(pr_numbers_and_num_commits)
+        ) + f"\n*   `{pr_numbers_and_num_commits[-1][0].base_branch_name}`"
         extra.append(bulleted_list)
+        if reviewstack:
+            extra.append(f"\n{_HORIZONTAL_RULE}")
+            reviewstack_url = f"https://reviewstack.dev/{owner}/{name}/pull/{top_pr.number}"
+            review_stack_message = "_PR stack created with [Sapling](https://sapling-scm.com)._"
+            f"Best reviewed with [ReviewStack]({reviewstack_url})."
+            extra.append(review_stack_message)
     if extra:
         body = "\n".join([body, _HORIZONTAL_RULE] + extra)
     return title, body
 
 
-_STACK_ENTRY = re.compile(r"^\* (__->__ )?#([1-9]\d*).*$")
+_STACK_ENTRY = re.compile(r"^\* _*(__->__|`[-> ]*`|➡️)?\s*#([1-9]\d*).*$")
+_STACK_ARROW = re.compile(r"[>➡️]")
+_STACK_SPACER = re.compile(r"^  .*$")
 
 # Pair where the first value is True if this entry was noted as the "current"
 # one with the "__->__" marker; otherwise, False.
@@ -113,8 +118,8 @@ def parse_stack_information(body: str) -> List[_StackEntry]:
             match = _STACK_ENTRY.match(line)
             if match:
                 arrow, number = match.groups()
-                stack_entries.append((bool(arrow), int(number, 10)))
-            else:
+                stack_entries.append(bool(_STACK_ARROW.match(arrow), int(number, 10)))
+            elif not _STACK_SPACER.match(line):
                 # This must be the end of the list.
                 break
         elif is_prev_line_hr:
@@ -125,20 +130,24 @@ def parse_stack_information(body: str) -> List[_StackEntry]:
             is_prev_line_hr = True
     return stack_entries
 
+def _format_branch_name(branch_name: str) -> str:
+    truncated_branch_name = branch_name
+    return f"`{truncated_branch_name}"
 
 def _format_stack_entry(
-    pr_number: int,
+    pr: PullRequestDetails,
     pr_number_index: int,
     current_pr_index: int,
     num_commits: int,
 ) -> str:
-    line = (
-        f"* #{pr_number}"
-        if current_pr_index != pr_number_index
-        else f"* __->__ #{pr_number}"
-    )
-    if num_commits > 1:
-        line += f" ({num_commits} commits)"
+    is_current = current_pr_index == pr_number_index
+    arrow = "`->`" if is_current else "`  `"
+    highlight = "__" if is_current else ""
+    # arrow = "` `" if current_pr_index != pr_number_index else "`>`"
+    # arrow = " " if current_pr_index != pr_number_index else "➡️"
+    num_commits_msg = f" ({num_commits} commits)" if num_commits > 1 else ""
+    line = f"* {highlight}{arrow} #{pr.number}: `{pr.head_branch_name}`{num_commits_msg}{highlight}"
+    line += "\n     ↓"
     return line
 
 
