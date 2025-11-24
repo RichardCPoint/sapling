@@ -1,0 +1,31 @@
+name: Eden SCM OSS
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  make-oss:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install fbthrift (thrift1)
+        run: |
+          brew install fbthrift
+
+      - name: Run make oss
+        working-directory: eden/scm
+        run: |
+          THRIFT_INCLUDE_PATH="${GITHUB_WORKSPACE}" make oss
+
+      - name: Show Sapling version
+        working-directory: eden/scm
+        run: ./sl --version
