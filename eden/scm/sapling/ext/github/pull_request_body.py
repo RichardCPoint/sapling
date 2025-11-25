@@ -6,7 +6,7 @@
 import re
 from typing import List, Tuple, Union
 
-from .gh_submit import Repository
+from .gh_submit import PullRequestDetails, Repository
 
 _HORIZONTAL_RULE = "---"
 _SAPLING_FOOTER_MARKER = "[//]: # (BEGIN SAPLING FOOTER)"
@@ -14,7 +14,7 @@ _SAPLING_FOOTER_MARKER = "[//]: # (BEGIN SAPLING FOOTER)"
 
 def create_pull_request_title_and_body(
     commit_msg_or_title_body: Union[str, Tuple[str, str]],
-    pr_numbers_and_num_commits: List[Tuple[int, int]],
+    pr_numbers_and_num_commits: List[Tuple[PullRequestDetails, int]],
     pr_numbers_index: int,
     repository: Repository,
     reviewstack: bool = True,
@@ -97,7 +97,7 @@ def create_pull_request_title_and_body(
     Bar
     """
     owner, name = repository.get_upstream_owner_and_name()
-    pr = pr_numbers_and_num_commits[pr_numbers_index][0]
+    top_pr = pr_numbers_and_num_commits[pr_numbers_index][0]
 
     try:
         title, body = commit_msg_or_title_body
@@ -107,15 +107,25 @@ def create_pull_request_title_and_body(
     body = _strip_stack_information(body)
     extra = []
     if len(pr_numbers_and_num_commits) > 1:
-        if reviewstack:
-            reviewstack_url = f"https://reviewstack.dev/{owner}/{name}/pull/{pr}"
-            review_stack_message = f"Stack created with [Sapling](https://sapling-scm.com). Best reviewed with [ReviewStack]({reviewstack_url})."
-            extra.append(review_stack_message)
-        bulleted_list = "\n".join(
-            _format_stack_entry(pr_number, index, pr_numbers_index, num_commits)
-            for index, (pr_number, num_commits) in enumerate(pr_numbers_and_num_commits)
+        extra.append("### PR Stack")
+        bulleted_list = (
+            "\n".join(
+                _format_stack_entry(pr, index, pr_numbers_index, num_commits)
+                for index, (pr, num_commits) in enumerate(pr_numbers_and_num_commits)
+            )
+            + f"\n*   {_format_branch_name(pr_numbers_and_num_commits[-1][0].base_branch_name)}"
         )
         extra.append(bulleted_list)
+        if reviewstack:
+            extra.append(f"\n{_HORIZONTAL_RULE}")
+            reviewstack_url = (
+                f"https://reviewstack.dev/{owner}/{name}/pull/{top_pr.number}"
+            )
+            review_stack_message = (
+                "_PR stack created with [Sapling](https://sapling-scm.com)._"
+            )
+            f"Best reviewed with [ReviewStack]({reviewstack_url})."
+            extra.append(review_stack_message)
     if extra:
         if body and not body.endswith("\n"):
             body += "\n"
@@ -125,7 +135,9 @@ def create_pull_request_title_and_body(
     return title, body
 
 
-_STACK_ENTRY = re.compile(r"^\* (__->__ )?#([1-9]\d*).*$")
+_STACK_ENTRY = re.compile(r"^\* _*(__->__|`[-> ]*`|➡️)?\s*#([1-9]\d*).*$")
+_STACK_ARROW = re.compile(r"[>➡️]")
+_STACK_SPACER = re.compile(r"^  .*$")
 
 # Pair where the first value is True if this entry was noted as the "current"
 # one with the "__->__" marker; otherwise, False.
@@ -175,11 +187,21 @@ def parse_stack_information(body: str) -> List[_StackEntry]:
             match = _STACK_ENTRY.match(line)
             if match:
                 arrow, number = match.groups()
-                stack_entries.append((bool(arrow), int(number, 10)))
-            else:
+                stack_entries.append(bool(_STACK_ARROW.match(arrow), int(number, 10)))
+            elif not _STACK_SPACER.match(line):
                 # This must be the end of the list.
                 break
     return stack_entries
+
+
+_MAX_FORMATTED_BRANCH_NAME_LEN = 18
+
+
+def _format_branch_name(branch_name: str) -> str:
+    truncated_branch_name = branch_name
+    if len(branch_name) > _MAX_FORMATTED_BRANCH_NAME_LEN:
+        truncated_branch_name = f"{branch_name[0:_MAX_FORMATTED_BRANCH_NAME_LEN-1]}…"
+    return f"`{truncated_branch_name}`"
 
 
 def _line_has_stack_list_marker(line: str) -> bool:
@@ -224,18 +246,19 @@ def _strip_stack_information(body: str) -> str:
 
 
 def _format_stack_entry(
-    pr_number: int,
+    pr: PullRequestDetails,
     pr_number_index: int,
     current_pr_index: int,
     num_commits: int,
 ) -> str:
-    line = (
-        f"* #{pr_number}"
-        if current_pr_index != pr_number_index
-        else f"* __->__ #{pr_number}"
-    )
-    if num_commits > 1:
-        line += f" ({num_commits} commits)"
+    is_current = current_pr_index == pr_number_index
+    arrow = "`->`" if is_current else "`  `"
+    highlight = "__" if is_current else ""
+    # arrow = "` `" if current_pr_index != pr_number_index else "`>`"
+    # arrow = " " if current_pr_index != pr_number_index else "➡️"
+    num_commits_msg = f" ({num_commits} commits)" if num_commits > 1 else ""
+    line = f"* {highlight}{arrow} #{pr.number}: {_format_branch_name(pr.head_branch_name)}{num_commits_msg}{highlight}"
+    line += "\n     ↓"
     return line
 
 
