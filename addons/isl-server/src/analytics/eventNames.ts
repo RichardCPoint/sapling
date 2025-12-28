@@ -133,6 +133,7 @@ export type TrackEventName =
   | 'LogCommand'
   | 'LookupCommitsCommand'
   | 'LookupAllCommitChangedFilesCommand'
+  | 'LookupFileCopiesCommand'
   | 'GetShelvesCommand'
   | 'GetConflictsCommand'
   | 'BlameCommand'

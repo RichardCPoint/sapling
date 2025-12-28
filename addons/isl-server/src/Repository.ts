@@ -87,6 +87,7 @@ import {
   CHANGED_FILES_INDEX,
   CHANGED_FILES_TEMPLATE,
   COMMIT_END_MARK,
+  FILE_COPIES_TEMPLATE,
   SHELVE_FETCH_TEMPLATE,
   attachStableLocations,
   getMainFetchTemplate,
@@ -1477,22 +1478,49 @@ export class Repository {
       return [];
     }
 
+    // Fetch file copies separately for error tolerance (Git repos don't support file_copies template)
+    const fileCopies = await this.getFileCopies(ctx, hash);
+
     const files: Array<ChangedFile> = [
-      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesModified]) as Array<string>).map(path => ({
-        path,
+      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesModified]) as Array<string>).map(filePath => ({
+        path: filePath,
         status: 'M' as const,
       })),
-      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesAdded]) as Array<string>).map(path => ({
-        path,
+      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesAdded]) as Array<string>).map(filePath => ({
+        path: filePath,
         status: 'A' as const,
+        // If this added file has a copy source, include it
+        ...(fileCopies[filePath] != null ? {copy: fileCopies[filePath]} : {}),
       })),
-      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesRemoved]) as Array<string>).map(path => ({
-        path,
+      ...(JSON.parse(lines[CHANGED_FILES_INDEX.filesRemoved]) as Array<string>).map(filePath => ({
+        path: filePath,
         status: 'R' as const,
       })),
     ];
 
     return files;
+  }
+
+  /**
+   * Fetch file copy/rename information for a commit.
+   * Returns a map from destination path to source path.
+   * This is loaded separately from other file info for error tolerance,
+   * since Git repos don't support the file_copies template keyword.
+   */
+  private async getFileCopies(ctx: RepositoryContext, hash: Hash): Promise<Record<string, string>> {
+    try {
+      const output = (
+        await this.runCommand(
+          ['log', '--template', FILE_COPIES_TEMPLATE, '--rev', hash],
+          'LookupFileCopiesCommand',
+          ctx,
+        )
+      ).stdout;
+      return JSON.parse(output.trim()) as Record<string, string>;
+    } catch {
+      // file_copies template is not supported in Git repos, return empty
+      return {};
+    }
   }
 
   public async getShelvedChanges(ctx: RepositoryContext): Promise<Array<ShelvedChange>> {
