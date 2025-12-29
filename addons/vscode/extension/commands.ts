@@ -42,8 +42,8 @@ export const vscodeCommands = {
   ['sapling.open-file-diff-stack']: commandWithUriOrResourceState((_, uri: vscode.Uri) =>
     openDiffView(uri, {type: ComparisonType.StackChanges}),
   ),
-  ['sapling.open-file-diff']: (uri: vscode.Uri, comparison: Comparison) =>
-    openDiffView(uri, comparison),
+  ['sapling.open-file-diff']: (uri: vscode.Uri, comparison: Comparison, oldUri?: vscode.Uri) =>
+    openDiffView(uri, comparison, oldUri),
 
   ['sapling.open-remote-file-link']: commandWithUriOrResourceState(
     (repo: Repository, uri, path: RepoRelativePath) => openRemoteFileLink(repo, uri, path),
@@ -164,8 +164,19 @@ function fileExists(uri: vscode.Uri): Promise<boolean> {
     .catch(() => false);
 }
 
-async function openDiffView(uri: vscode.Uri, comparison: Comparison): Promise<unknown> {
-  const leftUri = getLeftUri(uri, comparison);
+/**
+ * Open a diff view for a file.
+ * @param uri The current file URI (right side of diff)
+ * @param comparison The comparison to show
+ * @param oldUri For renamed/copied files, the original file URI to use for the left side
+ */
+async function openDiffView(
+  uri: vscode.Uri,
+  comparison: Comparison,
+  oldUri?: vscode.Uri,
+): Promise<unknown> {
+  // For renamed/copied files, use the old URI for the left side
+  const leftUri = getLeftUri(oldUri ?? uri, comparison);
   const rightUri = await getRightUri(uri, comparison);
   const title = `${path.basename(uri.fsPath)} (${t(labelForComparison(comparison))})`;
   const opts = {viewColumn: shouldOpenBeside() ? vscode.ViewColumn.Beside : undefined};
