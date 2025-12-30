@@ -1262,6 +1262,12 @@ class gitfilelog:
     def renamed(self, node):
         return False
 
+    def __iter__(self):
+        # gitfilelog doesn't support iteration like revlog-based filelogs.
+        # Callers that need rename info should use filectx.renamed() which
+        # uses dagcopytrace for git repos.
+        return iter([])
+
 
 def hashobj(kind, text):
     """(bytes, bytes) -> bytes. obtain git SHA1 hash"""
