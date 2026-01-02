@@ -71,6 +71,25 @@ export function basename(s: string, delimiter = '/') {
 }
 
 /**
+ * Returns the part of the string before the last occurrence of delimiter,
+ * or an empty string if no matches are found.
+ * (default delimiter is '/')
+ *
+ * ```
+ * dirname('/path/to/foo.txt', '/') -> '/path/to'
+ * dirname('foo.txt', '/') -> ''
+ * dirname('/path/', '/') -> '/path'
+ * ```
+ */
+export function dirname(s: string, delimiter = '/') {
+  const foundIndex = s.lastIndexOf(delimiter);
+  if (foundIndex === -1) {
+    return '';
+  }
+  return s.slice(0, foundIndex);
+}
+
+/**
  * Given a multi-line string, return the first line excluding '\n'.
  * If no newlines in the string, return the whole string.
  */
