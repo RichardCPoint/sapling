@@ -77,8 +77,9 @@ def create_pull_request_title_and_body(
     Second line of message.
     <BLANKLINE>
     <BLANKLINE>
-    ---
     [//]: # (BEGIN SAPLING FOOTER)
+    <BLANKLINE>
+    ---
     * #1
     * #2 (2 commits)
     * __->__ #42
@@ -131,7 +132,7 @@ def create_pull_request_title_and_body(
             body += "\n"
         if body:
             body += "\n"
-        body += "\n".join([_HORIZONTAL_RULE, _SAPLING_FOOTER_MARKER] + extra)
+        body += "\n".join([_SAPLING_FOOTER_MARKER, "", _HORIZONTAL_RULE] + extra)
     return title, body
 
 
@@ -212,7 +213,7 @@ def _line_has_stack_list_marker(line: str) -> bool:
 
 
 _SAPLING_FOOTER_WITH_HRULE = re.compile(
-    re.escape(_HORIZONTAL_RULE) + r"\r?\n" + re.escape(_SAPLING_FOOTER_MARKER),
+    re.escape(_SAPLING_FOOTER_MARKER),
     re.MULTILINE,
 )
 
