@@ -34,7 +34,13 @@ export interface Platform {
   openFiles(paths: ReadonlyArray<RepoRelativePath>, options?: {line?: OneIndexedLineNumber}): void;
   canCustomizeFileOpener: boolean;
   openContainingFolder?(path: RepoRelativePath): void;
-  openDiff?(path: RepoRelativePath, comparison: Comparison): void;
+  /**
+   * Open a diff view for a file.
+   * @param path The current file path
+   * @param comparison The comparison to show
+   * @param oldPath For renamed/copied files, the original file path to use for the "before" side
+   */
+  openDiff?(path: RepoRelativePath, comparison: Comparison, oldPath?: RepoRelativePath): void;
   openExternalLink(url: string): void;
   clipboardCopy(text: string, html?: string): void;
   chooseFile?(title: string, multi: boolean): Promise<Array<File>>;

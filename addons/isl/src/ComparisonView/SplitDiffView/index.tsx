@@ -64,7 +64,12 @@ export function SplitDiffView({
             icon
             className="split-diff-view-file-header-open-diff-button"
             onClick={() => {
-              platform.openDiff?.(path, ctx.id.comparison);
+              // For renamed/copied files, pass the old file name for the left side of the diff
+              const oldPath =
+                patch.oldFileName != null && patch.oldFileName !== patch.newFileName
+                  ? patch.oldFileName
+                  : undefined;
+              platform.openDiff?.(path, ctx.id.comparison, oldPath);
             }}>
             <Icon icon="git-pull-request-go-to-changes" />
           </Button>
