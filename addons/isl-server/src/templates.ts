@@ -270,6 +270,10 @@ export const CHANGED_FILES_TEMPLATE = [
   COMMIT_END_MARK,
 ].join('\n');
 
+///// File Copies (loaded separately for error tolerance with Git repos) /////
+
+export const FILE_COPIES_TEMPLATE = '{file_copies|json}';
+
 ///// Helpers /////
 
 function parseSuccessorData(successorData: string): SuccessorInfo | undefined {
