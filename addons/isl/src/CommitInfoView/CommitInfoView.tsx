@@ -6,7 +6,7 @@
  */
 
 import type {Operation} from '../operations/Operation';
-import type {CommitInfo, DiffId} from '../types';
+import type {ChangedFile, CommitInfo, DiffId} from '../types';
 import type {CommitInfoMode, EditedMessage} from './CommitInfoState';
 import type {CommitMessageFields, FieldConfig, FieldsBeingEdited} from './types';
 
@@ -23,13 +23,13 @@ import {Subtle} from 'isl-components/Subtle';
 import {Tooltip} from 'isl-components/Tooltip';
 import {atom, useAtom, useAtomValue} from 'jotai';
 import {useAtomCallback} from 'jotai/utils';
-import {useCallback, useEffect, useMemo} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {ComparisonType} from 'shared/Comparison';
 import {useContextMenu} from 'shared/ContextMenu';
 import {usePrevious} from 'shared/hooks';
 import {firstLine, notEmpty, nullthrows} from 'shared/utils';
 import {tracker} from '../analytics';
-import {ChangedFilesWithFetching} from '../ChangedFilesWithFetching';
+import {ChangedFilesWithFetching, getChangedFilesForHash} from '../ChangedFilesWithFetching';
 import serverAPI from '../ClientToServerAPI';
 import {
   allDiffSummaries,
@@ -43,7 +43,7 @@ import {Commit} from '../Commit';
 import {OpenComparisonViewButton} from '../ComparisonView/OpenComparisonViewButton';
 import {Center} from '../ComponentUtils';
 import {confirmNoBlockingDiagnostics} from '../Diagnostics';
-import {FoldButton, useRunFoldPreview} from '../fold';
+import {FoldButton, getContiguousRange, useRunFoldPreview} from '../fold';
 import {getCachedGeneratedFileStatuses, useGeneratedFileStatuses} from '../GeneratedFile';
 import {t, T} from '../i18n';
 import {IrrelevantCwdIcon} from '../icons/IrrelevantCwdIcon';
@@ -77,7 +77,7 @@ import {latestSuccessorUnlessExplicitlyObsolete} from '../successionUtils';
 import {SuggestedRebaseButton} from '../SuggestedRebase';
 import {showToast} from '../toast';
 import {GeneratedStatus, succeedableRevset} from '../types';
-import {UncommittedChanges} from '../UncommittedChanges';
+import {ChangedFiles, UncommittedChanges} from '../UncommittedChanges';
 import {confirmUnsavedFiles} from '../UnsavedFiles';
 import {useModal} from '../useModal';
 import {firstOfIterable} from '../utils';
@@ -135,6 +135,16 @@ export function CommitInfoSidebar() {
 
 export function MultiCommitInfo({selectedCommits}: {selectedCommits: Array<CommitInfo>}) {
   const commitsWithDiffs = selectedCommits.filter(commit => commit.diffId != null);
+  const dag = useAtomValue(dagWithPreviews);
+
+  // Check if commits are contiguous (form a linear parent-child chain)
+  const contiguousCommits = useMemo(() => {
+    const hashes = new Set(selectedCommits.map(c => c.hash));
+    return getContiguousRange(hashes, dag);
+  }, [selectedCommits, dag]);
+
+  const isContiguous = contiguousCommits != null;
+
   return (
     <div className="commit-info-view-multi-commit" data-testid="commit-info-view">
       <strong className="commit-list-header">
@@ -152,6 +162,28 @@ export function MultiCommitInfo({selectedCommits}: {selectedCommits: Array<Commi
           />
         ))}
       </div>
+      {isContiguous && (
+        <Section data-testid="multi-commit-files-changed">
+          <SmallCapsTitle>
+            <T>Files Changed</T>
+          </SmallCapsTitle>
+          <div className="changed-file-list">
+            <div className="button-row">
+              <OpenComparisonViewButton
+                comparison={{
+                  type: ComparisonType.MultipleCommits,
+                  hashRange: [
+                    contiguousCommits[0].hash,
+                    contiguousCommits[contiguousCommits.length - 1].hash,
+                  ],
+                }}
+                buttonText={t('View Changes in Range')}
+              />
+            </div>
+            <MultiCommitChangedFiles commits={contiguousCommits} />
+          </div>
+        </Section>
+      )}
       <div className="commit-info-actions-bar">
         <div className="commit-info-actions-bar-right">
           <SuggestedRebaseButton
@@ -170,6 +202,117 @@ export function MultiCommitInfo({selectedCommits}: {selectedCommits: Array<Commi
         </div>
       </div>
     </div>
+  );
+}
+
+function combineChangedFiles(fileMap: Map<string, ChangedFile>, newFiles: Array<ChangedFile>) {
+  const updatedFileCopies = new Map<string, null | string>();
+  for (const file of newFiles) {
+    if (file.status !== 'A' || file.copy == null) {
+      continue;
+    }
+
+    const existingSourceFile = fileMap.get(file.copy);
+    if (existingSourceFile?.status === 'A') {
+      updatedFileCopies.set(file.path, existingSourceFile.copy ?? null);
+    }
+  }
+
+  for (const file of newFiles) {
+    const {path} = file;
+    const existingFile = fileMap.get(path);
+
+    if (existingFile?.status === 'A' && file.status === 'R') {
+      fileMap.delete(path);
+      continue;
+    }
+
+    let updatedFile = file;
+    if (existingFile?.status === 'A') {
+      updatedFile = existingFile;
+    } else if (existingFile != null) {
+      updatedFile = {
+        path,
+        status: 'M',
+      };
+    } else if (updatedFile.status === 'A' && updatedFileCopies.has(path)) {
+      updatedFile = {
+        ...updatedFile,
+        copy: updatedFileCopies.get(path) ?? undefined,
+      };
+    }
+
+    fileMap.set(path, updatedFile);
+  }
+}
+
+/**
+ * Display combined changed files from multiple contiguous commits.
+ * Fetches and aggregates files from all commits in the range.
+ */
+function MultiCommitChangedFiles({commits}: {commits: Array<CommitInfo>}) {
+  const [fetchedFiles, setFetchedFiles] = useState<Map<string, Array<ChangedFile>>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setFetchedFiles(new Map());
+
+    const fetchPromises = commits.map(async commit => {
+      const result = await getChangedFilesForHash(commit.hash, undefined);
+      return {hash: commit.hash, files: result.value?.filesSample ?? []};
+    });
+
+    Promise.all(fetchPromises).then(results => {
+      const filesMap = new Map<string, Array<ChangedFile>>();
+      for (const {hash, files} of results) {
+        filesMap.set(hash, files);
+      }
+      setFetchedFiles(filesMap);
+      setIsLoading(false);
+    });
+  }, [commits]);
+
+  // Aggregate files from all commits, deduplicating by path
+  // Later commits' statuses take precedence
+  const aggregatedFiles = useMemo(() => {
+    const fileMap = new Map<string, ChangedFile>();
+    for (const commit of commits) {
+      const files = fetchedFiles.get(commit.hash) ?? [];
+      combineChangedFiles(fileMap, files);
+    }
+    return Array.from(fileMap.values());
+  }, [commits, fetchedFiles]);
+
+  if (commits.length === 0) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <Center>
+        <Icon icon="loading" />
+      </Center>
+    );
+  }
+
+  if (aggregatedFiles.length === 0) {
+    return (
+      <Subtle>
+        <T>No files changed</T>
+      </Subtle>
+    );
+  }
+
+  return (
+    <ChangedFiles
+      filesSubset={aggregatedFiles}
+      totalFiles={aggregatedFiles.length}
+      comparison={{
+        type: ComparisonType.MultipleCommits,
+        hashRange: [commits[0].hash, commits[commits.length - 1].hash],
+      }}
+    />
   );
 }
 
