@@ -40,6 +40,9 @@ RUST_FLAG = --debug
 endif
 
 $(eval HGROOT := $(shell pwd))
+# Set THRIFT_INCLUDE_PATH to repo root for thrift compiler to find includes
+# like thrift/annotation/cpp.thrift. Only set if not already defined.
+export THRIFT_INCLUDE_PATH ?= $(HGROOT)/../..
 HGPYTHONS ?= $(HGROOT)/build/pythons
 PURE=
 PYFILES:=$(shell find mercurial ext -name '*.py' 2>/dev/null)
