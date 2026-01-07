@@ -71,8 +71,8 @@ const vscodeWebviewPlatform: Platform = {
   openFiles: (paths, options) =>
     window.clientToServerAPI?.postMessage({type: 'platform/openFiles', paths, options}),
   canCustomizeFileOpener: false,
-  openDiff: (path: RepoRelativePath, comparison: Comparison) =>
-    window.clientToServerAPI?.postMessage({type: 'platform/openDiff', path, comparison}),
+  openDiff: (path: RepoRelativePath, comparison: Comparison, oldPath?: RepoRelativePath) =>
+    window.clientToServerAPI?.postMessage({type: 'platform/openDiff', path, comparison, oldPath}),
   openExternalLink: url => {
     window.clientToServerAPI?.postMessage({type: 'platform/openExternal', url});
   },
