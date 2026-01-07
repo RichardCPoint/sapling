@@ -48,6 +48,7 @@ from . import (
     git,
     gpg,
     hook,
+    json,
     identity,
     lock as lockmod,
     manifest,
@@ -1871,7 +1872,9 @@ class localrepository:
                 # "lazychangelog" assumes commits in the master group are lazy
                 # and resolvable by the server, which is no longer true if we
                 # force local "hg commit" commits in the master group.
-                assert util.istest(), "devel.segmented-changelog-rev-compat should not be used outside tests"
+                assert (
+                    util.istest()
+                ), "devel.segmented-changelog-rev-compat should not be used outside tests"
                 cl.inner.flush(list(cl.dag.dirty().iterrev()))
                 return
 
@@ -2827,6 +2830,20 @@ class localrepository:
             extra = ctx.extra().copy()
             if isgit:
                 git.update_extra_with_git_committer(self.ui, ctx, extra)
+                # Add file copy information to Git commit extras
+                if self.ui.configbool("copytrace", "write-copy-data", False):
+                    # Get copy info from ctx's file contexts, not dirstate.
+                    # This handles chained renames correctly during amend
+                    # (e.g., A→B→C becomes A→C).
+                    copies = {}
+                    for path in ctx.files():
+                        fctx = ctx.filectx(path)
+                        if fctx is not None:
+                            renamed = fctx.renamed()
+                            if renamed:
+                                copies[path] = renamed[0]
+                    if copies:
+                        extra["x-file-copies-json"] = json.dumps(copies)
 
             if subtreeutil.extra_contains_shallow_copy(extra):
                 # the file list can be large for a shallow copy, so don't
