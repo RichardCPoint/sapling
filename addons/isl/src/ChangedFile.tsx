@@ -96,7 +96,8 @@ export function File({
         label: t('Open Diff View ($comparison)', {
           replace: {$comparison: labelForComparison(comparison)},
         }),
-        onClick: () => platform.openDiff?.(file.path, comparison),
+        onClick: () =>
+          platform.openDiff?.(file.path, comparison, file.renamedFrom ?? file.copiedFrom),
       });
     }
 
@@ -222,7 +223,7 @@ function FileActions({
           icon
           data-testid="file-open-diff-button"
           onClick={() => {
-            platform.openDiff?.(file.path, comparison);
+            platform.openDiff?.(file.path, comparison, file.renamedFrom ?? file.copiedFrom);
           }}>
           <Icon icon="request-changes" />
         </Button>

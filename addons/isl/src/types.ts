@@ -713,7 +713,13 @@ export type PlatformSpecificClientToServerMessages =
       options?: {line?: OneIndexedLineNumber};
     }
   | {type: 'platform/openContainingFolder'; path: RepoRelativePath}
-  | {type: 'platform/openDiff'; path: RepoRelativePath; comparison: Comparison}
+  | {
+      type: 'platform/openDiff';
+      path: RepoRelativePath;
+      comparison: Comparison;
+      /** For renamed/copied files, the original file path to use for the "before" side */
+      oldPath?: RepoRelativePath;
+    }
   | {type: 'platform/openExternal'; url: string}
   | {type: 'platform/changeTitle'; title: string}
   | {type: 'platform/confirm'; message: string; details?: string | undefined}
