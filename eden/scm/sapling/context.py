@@ -1464,6 +1464,25 @@ class filectx(basefilectx):
         or both changeset parents contain different file revisions.
         """
 
+        # For git repos, filelogs don't store rename info, so use dagcopytrace
+        if git.isgitformat(self._repo):
+            parents = self._changectx.parents()
+            if not parents:
+                return None
+            path = self.path()
+            copies_dict = self._repo._dagcopytrace.path_copies(
+                parents[0].node(), self._changectx.node(), None
+            )
+            if path in copies_dict:
+                # Return (source_path, source_node) tuple
+                src_path = copies_dict[path]
+                try:
+                    src_node = parents[0].filenode(src_path)
+                except error.LookupError:
+                    src_node = nullid
+                return (src_path, src_node)
+            return None
+
         renamed = self._filelog.renamed(self._filenode)
         if not renamed:
             return renamed
