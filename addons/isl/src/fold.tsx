@@ -72,6 +72,34 @@ export function getFoldableRange(selection: Set<Hash>, dag: Dag): Array<CommitIn
   return dag.getBatch(dag.sortAsc(set, {gap: false}));
 }
 
+/**
+ * Given a set of selected commits, order them into an array from bottom to top.
+ * Returns undefined if commits don't form a contiguous linear chain.
+ * Unlike getFoldableRange, this allows commits to have branches/children outside the selection.
+ * This is useful for displaying aggregated file changes across a range of commits.
+ */
+export function getContiguousRange(selection: Set<Hash>, dag: Dag): Array<CommitInfo> | undefined {
+  const set = dag.present(selection);
+  if (set.size <= 1) {
+    return undefined;
+  }
+  // Must have single head and single root (linear chain)
+  if (dag.heads(set).size !== 1 || dag.roots(set).size !== 1) {
+    return undefined;
+  }
+  // No merge commits allowed (each commit has at most one parent in the set)
+  if (dag.merge(set).size > 0) {
+    return undefined;
+  }
+  // sortAsc with gap: false ensures there are no missing commits in the chain
+  const sorted = dag.sortAsc(set, {gap: false});
+  if (sorted.length !== set.size) {
+    // If sortAsc filtered out commits due to gaps, the selection isn't contiguous
+    return undefined;
+  }
+  return dag.getBatch(sorted);
+}
+
 export function FoldButton({commit}: {commit?: CommitInfo}) {
   const foldable = useAtomValue(foldableSelection);
   const onClick = useCallback(() => {
