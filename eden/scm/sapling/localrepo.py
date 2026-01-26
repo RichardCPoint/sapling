@@ -48,6 +48,7 @@ from . import (
     gpg,
     hook,
     identity,
+    json,
     lock as lockmod,
     manifest,
     match as matchmod,
@@ -2828,6 +2829,20 @@ class localrepository:
             extra = ctx.extra().copy()
             if isgit:
                 git.update_extra_with_git_committer(self.ui, ctx, extra)
+                # Add file copy information to Git commit extras
+                if self.ui.configbool("copytrace", "write-copy-data", False):
+                    # Get copy info from ctx's file contexts, not dirstate.
+                    # This handles chained renames correctly during amend
+                    # (e.g., A→B→C becomes A→C).
+                    copies = {}
+                    for path in ctx.files():
+                        fctx = ctx.filectx(path)
+                        if fctx is not None:
+                            renamed = fctx.renamed()
+                            if renamed:
+                                copies[path] = renamed[0]
+                    if copies:
+                        extra["x-file-copies-json"] = json.dumps(copies)
 
             if subtreeutil.extra_contains_shallow_copy(extra):
                 # the file list can be large for a shallow copy, so don't

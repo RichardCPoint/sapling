@@ -75,6 +75,12 @@ The following are configs to tune the behavior of copy tracing algorithm:
     # how many previous commits to search through when looking for amend
     # copytrace data.
     amendcopytracecommitlimit = 100
+
+    # Whether to write copy/rename information to the x-sl-file-copies commit
+    # extra for Git format repositories. When enabled, explicit copy tracking
+    # is stored in Git commits instead of relying on content-similarity detection.
+    # The read path is always active - if x-file-copies-json exists, it will be used.
+    write-copy-data = False
 """
 
 import codecs
