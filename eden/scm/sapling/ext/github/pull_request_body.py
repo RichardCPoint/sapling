@@ -98,6 +98,9 @@ def create_pull_request_title_and_body(
     Bar
     """
     owner, name = repository.get_upstream_owner_and_name()
+
+    pr_numbers_and_num_commits = pr_numbers_and_num_commits[pr_numbers_index:]
+    pr_numbers_index = 0
     top_pr = pr_numbers_and_num_commits[pr_numbers_index][0]
 
     try:
