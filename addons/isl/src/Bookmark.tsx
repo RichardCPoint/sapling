@@ -36,6 +36,12 @@ import {latestSuccessorUnlessExplicitlyObsolete} from './successionUtils';
 import {showModal} from './useModal';
 
 const styles = stylex.create({
+  flex: {
+    display: 'flex',
+    gap: 'var(--halfpad)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stable: {
     backgroundColor: 'var(--list-hover-background)',
     color: 'var(--list-hover-foreground)',
@@ -84,8 +90,8 @@ export function Bookmark({
   children,
   kind,
   fullLength,
-  tooltip,
-  icon,
+  tooltip: tooltipFromProps,
+  icon: iconFromProps,
 }: {
   children: string;
   kind: BookmarkKind;
@@ -114,6 +120,18 @@ export function Bookmark({
     logExposureOncePerSession(bookmark);
   }
 
+  let icon: undefined | string = iconFromProps;
+  let text = bookmark;
+  let tooltip = tooltipFromProps;
+  
+  if (icon == null && tooltip == null) {
+    if (kind === 'remote') {
+      icon = 'cloud';
+      text = bookmark.replace(/^remote\//, '');
+      tooltip = bookmark;
+    }
+  }
+
   const inner = (
     <Tag
       onContextMenu={contextMenu}
@@ -123,7 +141,7 @@ export function Bookmark({
         fullLength === true && styles.fullLength,
       ]}>
       {icon && <Icon icon={icon} size="XS" style={{display: 'flex', height: '12px'}} />}
-      {bookmark}
+      {text}
     </Tag>
   );
   return tooltip ? <Tooltip title={tooltip}>{inner}</Tooltip> : inner;
