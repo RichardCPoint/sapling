@@ -21,7 +21,7 @@ import {useAtomValue} from 'jotai';
 import React from 'react';
 import {ComparisonType, labelForComparison, revsetForComparison} from 'shared/Comparison';
 import {useContextMenu} from 'shared/ContextMenu';
-import {basename, notEmpty} from 'shared/utils';
+import {basename, dirname, notEmpty} from 'shared/utils';
 import {copyUrlForFile, supportsBrowseUrlForHash} from './BrowseRepo';
 import {type ChangedFilesDisplayType} from './ChangedFileDisplayTypePicker';
 import {generatedStatusDescription, generatedStatusToLabel} from './GeneratedFile';
@@ -53,6 +53,30 @@ import {usePromise} from './usePromise';
  * On windows, this actually uses the ctrl key instead to avoid conflicting with OS focus behaviors.
  */
 const holdingModifiedKeyAtom = isMac ? holdingAltAtom : holdingCtrlAtom;
+
+function FileStatusIcon({file, icon}: {file: UIChangedFile; icon: string}) {
+  const sourcePath = file.renamedFrom ?? file.copiedFrom;
+  if (sourcePath == null) {
+    return <Icon icon={icon} />;
+  }
+
+  let tooltipText: string;
+  if (file.copiedFrom != null) {
+    tooltipText = t('Copied from $path', {replace: {$path: sourcePath}});
+  } else if (basename(file.path) === basename(sourcePath)) {
+    tooltipText = t('Moved from $path', {replace: {$path: `${dirname(sourcePath)}/`}});
+  } else if (dirname(file.path) === dirname(sourcePath)) {
+    tooltipText = t('Renamed from $filename', {replace: {$filename: basename(sourcePath)}});
+  } else {
+    tooltipText = t('Moved/renamed from $path', {replace: {$path: sourcePath}});
+  }
+
+  return (
+    <Tooltip title={tooltipText}>
+      <Icon icon={icon} />
+    </Tooltip>
+  );
+}
 
 export function File({
   file,
@@ -152,7 +176,7 @@ export function File({
         }}>
         <FileSelectionCheckbox file={file} selection={selection} />
         <span className="changed-file-path" onClick={openFile}>
-          <Icon icon={icon} />
+          <FileStatusIcon file={file} icon={icon} />
           <Tooltip title={tooltip} delayMs={2_000} placement="right">
             <span
               className="changed-file-path-text"
