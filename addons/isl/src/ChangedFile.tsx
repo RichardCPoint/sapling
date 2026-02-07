@@ -251,7 +251,11 @@ function FileActions({
           icon
           data-testid="file-revert-button"
           onClick={async () => {
-            if (!(await confirmSuggestedEditsForFiles('revert', 'reject', [file.path]))) {
+            // For renamed files, we need to revert both the new file and restore the original
+            const filesToRevert =
+              file.renamedFrom != null ? [file.path, file.renamedFrom] : [file.path];
+
+            if (!(await confirmSuggestedEditsForFiles('revert', 'reject', filesToRevert))) {
               return;
             }
 
@@ -268,7 +272,7 @@ function FileActions({
             }
             runOperation(
               new RevertOperation(
-                [file.path],
+                filesToRevert,
                 comparison.type === ComparisonType.UncommittedChanges
                   ? undefined
                   : succeedableRevset(revsetForComparison(comparison)),

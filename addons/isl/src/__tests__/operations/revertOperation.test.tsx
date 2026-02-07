@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {nextTick} from 'shared/testUtils';
 import App from '../../App';
 import platform from '../../platform';
@@ -16,6 +16,7 @@ import {
   expectMessageSentToServer,
   resetTestMessages,
   simulateCommits,
+  simulateMessageFromServer,
   simulateUncommittedChangedFiles,
 } from '../../testUtils';
 import {CommandRunner} from '../../types';
@@ -382,6 +383,53 @@ describe('RevertOperation', () => {
       expect(
         CommitTreeListTestUtils.withinCommitTree().getByText(ignoreRTL('file.txt')),
       ).toBeInTheDocument();
+    });
+
+    it('reverts both paths for a renamed file', async () => {
+      CommitInfoTestUtils.clickToSelectCommit('c');
+
+      // Simulate a renamed file in the head commit
+      act(() => {
+        simulateMessageFromServer({
+          type: 'fetchedCommitChangedFiles',
+          hash: 'c',
+          result: {
+            value: {
+              filesSample: [
+                {path: 'newName.txt', status: 'A', copy: 'oldName.txt'},
+                {path: 'oldName.txt', status: 'R'},
+              ],
+              totalFileCount: 2,
+            },
+          },
+        });
+      });
+
+      // Wait for the renamed file to be displayed (oldName.txt → newName.txt)
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('commit-info-view')).getByTestId('changed-file-newName.txt'),
+        ).toBeInTheDocument();
+      });
+
+      // Click the revert button on it
+      await clickRevert(screen.getByTestId('commit-info-view'), 'newName.txt');
+
+      // Both the new file and the original file should be included in the revert
+      expectMessageSentToServer({
+        type: 'runOperation',
+        operation: {
+          args: [
+            'revert',
+            '--rev',
+            {type: 'succeedable-revset', revset: '.^'},
+            {type: 'repo-relative-file-list', paths: ['newName.txt', 'oldName.txt']},
+          ],
+          id: expect.anything(),
+          runner: CommandRunner.Sapling,
+          trackEventName: 'RevertOperation',
+        },
+      });
     });
   });
 });
